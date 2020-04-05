@@ -1,0 +1,68 @@
+version: '3'
+
+services:
+
+  influxdb:
+    image: influxdb:alpine
+    container_name: influxdb
+    network_mode: bridge
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./data/influxdb:/var/lib/influxdb
+    environment:
+      INFLUXDB_REPORTING_DISABLED: "true"
+      INFLUXDB_DB: telegraf
+      INFLUXDB_USER: telegraf
+      INFLUXDB_USER_PASSWORD: supersecret
+
+  grafana:
+    build: ./grafana
+    container_name: grafana
+    network_mode: bridge
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    links:
+      - influxdb
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      INFLUXDB_URI: "http://influxdb:8086"
+      INFLUXDB_DB: telegraf
+      INFLUXDB_USER: telegraf
+      INFLUXDB_USER_PASSWORD: supersecret
+
+  selenoid:
+    image: "aerokube/selenoid"
+    container_name: selenoid
+    network_mode: bridge
+    ports:
+      - "4444:4444"
+    volumes:
+      - "$PWD:/etc/selenoid/"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    command: ["--limit=50"]
+
+  selenoid-ui:
+    image: "aerokube/selenoid-ui"
+    container_name: selenoid-ui
+    network_mode: bridge
+    links:
+      - selenoid
+    ports:
+      - "8080:8080"
+    command: ["--selenoid-uri", "http://selenoid:4444"]
+
+  telegraf:
+    image: telegraf:latest
+    container_name: telegraf
+    network_mode: host
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    environment:
+      INFLUXDB_URI: "http://localhost:8086"
+    depends_on:
+      - selenoid
+      - influxdb
